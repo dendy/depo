@@ -2,6 +2,7 @@
 import os
 from git import Git
 import colorize
+import subprocess
 
 class Commit:
 	def __init__(self, log):
