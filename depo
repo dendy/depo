@@ -28,6 +28,9 @@ if is_help:
 
 if sys.platform == 'win32':
 	repo = [shutil.which('repo')]
+	python_executable = 'python3'
 else:
 	repo = ['repo']
-subprocess.run(repo + ['forall', '-c', sys.executable, script] + argv, check=True)
+	python_executable = sys.executable
+
+subprocess.run(repo + ['forall', '-c', python_executable, script] + argv, check=True)
