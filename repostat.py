@@ -16,7 +16,7 @@ class Stat:
 
 	filters = [do_not_merge_filter]
 
-	def __init__(self, merges=True):
+	def __init__(self, merges=True, commits=True):
 		self.git = Git()
 
 		self.remote = os.environ['REPO_REMOTE']
@@ -29,27 +29,28 @@ class Stat:
 		remote_revision = self.rrev if self.rrev.startswith('refs/') else self.remote + '/' + self.rrev
 		self.remote_local_revision = self.rrev if self.rrev.startswith('refs/') else 'refs/heads/' + self.rrev
 
-		self.commits = [Commit(l) for l in self.git.run(['log', '--oneline'] \
-				+ (['--no-merges'] if not merges else []) \
-				+ ['--format=%H %s']\
-				+ [remote_revision + '..HEAD'], \
-				color=False) \
-				.stdout.splitlines()]
+		if commits:
+			self.commits = [Commit(l) for l in self.git.run(['log', '--oneline'] \
+					+ (['--no-merges'] if not merges else []) \
+					+ ['--format=%H %s']\
+					+ [remote_revision + '..HEAD'], \
+					color=False) \
+					.stdout.splitlines()]
 
-		self.filtered_revs = [c.hash for c in self.commits for f in Stat.filters if not f(c)]
+			self.filtered_revs = [c.hash for c in self.commits for f in Stat.filters if not f(c)]
 
-		self.dirty_files = self.git.run(['status', '-s'], color=True).stdout.splitlines()
+			self.dirty_files = self.git.run(['status', '-s'], color=True).stdout.splitlines()
 
-		self.has_info = self.commits or self.dirty_files or self.filtered_revs
+			self.has_info = self.commits or self.dirty_files or self.filtered_revs
 
-		if self.has_info:
-			# resolve branch name and tracking flag
-			if self.git.run(['rev-parse', '--symbolic-full-name', 'HEAD']).stdout.strip() != 'HEAD':
-				self.branch_name = self.git.run(['rev-parse', '--abbrev-ref=loose', 'HEAD']).stdout.strip()
+			if self.has_info:
+				# resolve branch name and tracking flag
+				if self.git.run(['rev-parse', '--symbolic-full-name', 'HEAD']).stdout.strip() != 'HEAD':
+					self.branch_name = self.git.run(['rev-parse', '--abbrev-ref=loose', 'HEAD']).stdout.strip()
 
-				try:
-					branch_remote = self.git.run(['config', 'branch.' + self.branch_name + '.remote']).stdout.strip()
-					branch_merge = self.git.run(['config', 'branch.' + self.branch_name + '.merge']).stdout.strip()
-					self.is_tracking = branch_remote == self.remote and branch_merge == self.remote_local_revision
-				except subprocess.CalledProcessError:
-					pass
+					try:
+						branch_remote = self.git.run(['config', 'branch.' + self.branch_name + '.remote']).stdout.strip()
+						branch_merge = self.git.run(['config', 'branch.' + self.branch_name + '.merge']).stdout.strip()
+						self.is_tracking = branch_remote == self.remote and branch_merge == self.remote_local_revision
+					except subprocess.CalledProcessError:
+						pass
