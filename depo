@@ -4,33 +4,63 @@ import os.path
 import sys
 import subprocess
 import shutil
+import argparse
+import json
+
+import lib
+
 
 script_file = os.path.realpath(__file__)
 scripts_dir = os.path.dirname(script_file)
 
-is_help = False
-command_index = 1
 
-if sys.argv[1] == 'help':
-	command_index = 2
-	is_help = True
+class Main:
+	def __init__(self):
+		self.lib = lib.Lib()
 
-command = sys.argv[command_index]
-argv = sys.argv[command_index + 1:]
-if argv and argv[len(argv) - 1] == '.':
-	argv = argv[:-1]
-	os.environ['DEPO_CWD'] = os.getcwd()
-script = os.path.join(scripts_dir, "_" + command + ".py")
+		parser = argparse.ArgumentParser()
+		parser.add_argument('command')
+		parser.add_argument('args', nargs='*')
+		self.args = parser.parse_args()
 
-if is_help:
-	subprocess.run([sys.executable, script, '-h'], check=True)
-	sys.exit(0)
+	def exec(self):
 
-if sys.platform == 'win32':
-	repo = [shutil.which('repo')]
-	python_executable = 'python3'
-else:
-	repo = ['repo']
-	python_executable = sys.executable
+		if self.args.command == 'help':
+			isHelp = True
+			command = sys.argv[2]
+		else:
+			isHelp = False
+			command = self.args.command
 
-subprocess.run(repo + ['forall', '-c', python_executable, script] + argv, check=True)
+		script = os.path.join(scripts_dir, "_" + command + ".py")
+
+		if isHelp:
+			subprocess.run([sys.executable, script, '-h'], check=True)
+			sys.exit(0)
+
+		argv = sys.argv[2:]
+
+		if argv and argv[len(argv) - 1] == '.':
+			argv = argv[:-1]
+			self.lib.includeProjects([self.lib.projectName])
+		else:
+			manifestsDir = os.path.join(self.lib.rootDir, '.repo/manifests')
+			p4Config = os.path.join(manifestsDir, 'config.json')
+			if os.path.isfile(p4Config):
+				sys.path.append(manifestsDir)
+				from p4 import Tree as P4Tree
+				projectForName = P4Tree.load(json.loads(open(p4Config, 'r').read()))
+				self.lib.excludeProjects([p.localPath() for p in projectForName.values() if not p.sync])
+
+		if sys.platform == 'win32':
+			repo = [shutil.which('repo')]
+			python_executable = 'python3'
+		else:
+			repo = ['repo']
+			python_executable = sys.executable
+
+		subprocess.run(repo + ['forall', '-c', python_executable, script] + argv, check=True)
+
+
+if __name__ == '__main__':
+	Main().exec()

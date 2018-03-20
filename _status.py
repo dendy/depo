@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 
+import lib
+lib.Lib.check()
+
 import os
 import sys
 import argparse
+
 import subprocess
 from git import Git
 import colorize
 from repostat import Stat
-
-depo_cwd = os.environ.get('DEPO_CWD')
-if depo_cwd and depo_cwd != os.getcwd():
-	sys.exit()
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', action='store_true', default=False)
