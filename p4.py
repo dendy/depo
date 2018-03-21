@@ -20,23 +20,26 @@ class Project:
 
 		self.name = tokens[0]
 		self.binary = False
-		self.sync = False
+		self.sync = 10
 		self.map = None
 		self.tree = tree
 
 		for token in tokens[1:]:
-			if token == 'b':
+			key, value = Project.__parseToken(token)
+			if key == 'b':
 				self.binary = True
-			elif token == 's':
-				self.sync = True
-			elif '=' in token:
-				key, value = token.split('=', maxsplit=1)
-				if key == 'm':
-					self.map = value
-				else:
-					raise ValueError('Invalid project key:', key)
+			elif key == 's':
+				self.sync = 0 if value == None else int(value)
+			elif key == 'm':
+				self.map = value
 			else:
-				raise ValueError('Invalid token:', token)
+				raise ValueError('Invalid token key:', key)
+
+	def __parseToken(token):
+		index = token.find('=')
+		if index == 0:
+			raise ValueError('Invalid token:', token)
+		return (token, None) if index == -1 else (token[:index], token[index+1:])
 
 	def localPath(self):
 		treePath = self.tree.localPath()

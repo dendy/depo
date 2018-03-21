@@ -20,14 +20,15 @@ class Main:
 
 		parser = argparse.ArgumentParser()
 		parser.add_argument('command')
-		parser.add_argument('args', nargs='*')
+		parser.add_argument('--sync', default=0)
+		parser.add_argument('argv', nargs='*')
 		self.args = parser.parse_args()
 
 	def exec(self):
 
 		if self.args.command == 'help':
 			isHelp = True
-			command = sys.argv[2]
+			command = self.args.argv[0]
 		else:
 			isHelp = False
 			command = self.args.command
@@ -38,19 +39,18 @@ class Main:
 			subprocess.run([sys.executable, script, '-h'], check=True)
 			sys.exit(0)
 
-		argv = sys.argv[2:]
-
-		if argv and argv[len(argv) - 1] == '.':
-			argv = argv[:-1]
+		if self.args.argv and self.args.argv[len(argv) - 1] == '.':
+			self.args.argv = self.args.argv[:-1]
 			self.lib.includeProjects([self.lib.projectName])
 		else:
 			manifestsDir = os.path.join(self.lib.rootDir, '.repo/manifests')
 			p4Config = os.path.join(manifestsDir, 'config.json')
+			sync = 10 if self.args.sync == 'all' else int(self.args.sync)
 			if os.path.isfile(p4Config):
 				sys.path.append(manifestsDir)
 				from p4 import Tree as P4Tree
 				projectForName = P4Tree.load(json.loads(open(p4Config, 'r').read()))
-				self.lib.excludeProjects([p.localPath() for p in projectForName.values() if not p.sync])
+				self.lib.excludeProjects([p.localPath() for p in projectForName.values() if p.sync > sync])
 
 		if sys.platform == 'win32':
 			repo = [shutil.which('repo')]
@@ -59,7 +59,7 @@ class Main:
 			repo = ['repo']
 			python_executable = sys.executable
 
-		subprocess.run(repo + ['forall', '-c', python_executable, script] + argv, check=True)
+		subprocess.run(repo + ['forall', '-c', python_executable, script] + self.args.argv, check=True)
 
 
 if __name__ == '__main__':
