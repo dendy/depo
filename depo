@@ -39,7 +39,7 @@ class Main:
 			subprocess.run([sys.executable, script, '-h'], check=True)
 			sys.exit(0)
 
-		if self.args.argv and self.args.argv[len(argv) - 1] == '.':
+		if self.args.argv and self.args.argv[len(self.args.argv) - 1] == '.':
 			self.args.argv = self.args.argv[:-1]
 			self.lib.includeProjects([self.lib.projectName])
 		else:
