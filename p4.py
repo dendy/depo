@@ -140,8 +140,8 @@ class Task:
 		for line in self.process.stdout:
 			self.q.put(line)
 
-	def __collectErrorStatus(self):
-		return f'error (out={self.process.stdout.read()}\n\n err={self.process.stderr.read()}\n\n)'
+	def __collectErrorStatus(self, proc):
+		return f'error (out={proc.stdout.read()}\n\n err={proc.stderr.read()}\n\n)'
 
 	def run(self):
 		self.gitDir = os.path.abspath(self.path + '.git')
@@ -175,9 +175,13 @@ class Task:
 
 				self.process = subprocess.Popen(['git', '-C', self.gitDir, 'p4', 'sync'],
 						stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-		except subprocess.CalledProcessError:
-			self.status = self.__collectErrorStatus()
+		except subprocess.CalledProcessError as e:
+			self.status = self.__collectErrorStatus(e)
 			self.completed = True
+
+			if self.isCloning and os.path.exists(self.gitDir):
+				shutil.rmtree(self.gitDir)
+
 			return
 
 		self.q = queue.Queue()
@@ -201,7 +205,7 @@ class Task:
 
 			if self.process.returncode != None:
 				if self.process.returncode != 0:
-					self.status = self.__collectErrorStatus()
+					self.status = self.__collectErrorStatus(self.process)
 					self.completed = True
 				else:
 					# move the master branch to p4/master
