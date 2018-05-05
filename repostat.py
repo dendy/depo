@@ -26,7 +26,15 @@ class Stat:
 		self.branch_name = None
 		self.is_tracking = False
 
-		remote_revision = self.rrev if self.rrev.startswith('refs/') else self.remote + '/' + self.rrev
+		is_rrev_ref = self.rrev.startswith('refs/')
+		is_rrev_ref_heads = is_rrev_ref and self.rrev.startswith('refs/heads/')
+
+		if is_rrev_ref_heads:
+			remote_revision = self.rrev.replace('refs/heads/', self.remote + '/', 1)
+		elif is_rrev_ref:
+			remote_revision = self.rrev
+		else:
+			remote_revision = self.remote + '/' + self.rrev
 		self.remote_local_revision = self.rrev if self.rrev.startswith('refs/') else 'refs/heads/' + self.rrev
 
 		if commits:
