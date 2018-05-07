@@ -250,8 +250,14 @@ class Main:
 
 	def __init__(self):
 		parser = argparse.ArgumentParser()
+		parser.add_argument('--download', required=False, action='store_true')
+		parser.add_argument('--upload', required=False, action='store_true')
 		parser.add_argument('projects', nargs='*')
 		self.args = parser.parse_args()
+
+		useDefaultSyncFlags = not self.args.download and not self.args.upload
+		self.doDownload = True if useDefaultSyncFlags else self.args.download
+		self.doUpload = True if useDefaultSyncFlags else self.args.upload
 
 		with open('config.json', 'r') as configFile:
 			self.config = json.loads(configFile.read())
@@ -336,7 +342,70 @@ class Main:
 			self.printTask(task)
 			self.visibleTasks.append(task)
 
-	def exec(self):
+	def upload(self):
+		with open('p4-upload.json', 'r') as f:
+			config = json.loads(f.read())
+			host = config['host']
+			subdir = config['subdir']
+			branch = config['branch']
+
+		def gexec(command, *args):
+			nonlocal host
+			return subprocess.run(['ssh', host, 'gerrit', command, *args], \
+					stdout=subprocess.PIPE,
+					universal_newlines=True,
+					check=True).stdout
+
+		# get list of all projects
+		allGerritProjects = gexec('ls-projects').splitlines()
+
+		subdirPrefix = '' if not subdir else subdir + '/'
+		uploadGerritProjects = [p[len(subdirPrefix):] for p in allGerritProjects if p.startswith(subdirPrefix)]
+
+		for project in list(self.projectForPath.values()):
+			path = project.localPath()
+
+			exists = path in uploadGerritProjects
+
+			print('project:', project.localPath(), exists)
+
+			# create project on gerrit if it is not exist
+			if not exists:
+				gexec('create-project',
+					'--parent', 'roku-settings',
+					subdirPrefix + path
+				)
+
+			gitUrl = 'ssh://' + host + '/' + subdirPrefix + project.localPath()
+
+			# fetch changes from remote repository
+			def git(*args):
+				nonlocal project
+
+				gitDir = os.path.abspath(project.localPath() + '.git')
+
+				return subprocess.run(['git', '-C', gitDir, *args],
+					stdout=subprocess.PIPE,
+					stderr=subprocess.PIPE,
+					universal_newlines=True,
+					check=True
+				).stdout
+
+			localId = git('rev-parse', 'refs/remotes/p4/master').strip()
+
+			try:
+				remoteId = git('ls-remote', '--exit-code', gitUrl, branch).split(maxsplit=1)[0]
+				if remoteId == localId:
+					# nothing to upload, skip
+					continue
+			except subprocess.CalledProcessError as e:
+				# no remote id, this is ok, create a new branch
+				pass
+
+			git('push', '-o', 'skip-validation', gitUrl, localId + ':' + branch)
+
+
+	def download(self):
 		self.remainingProjects = list(self.projectForPath.values())
 		self.completedTasks = []
 		self.processedTaskCount = 0
@@ -355,12 +424,18 @@ class Main:
 				self.completeTasks(completedTasks)
 				self.printTaskLog()
 
+	def exec(self):
+		if self.doDownload:
+			self.download()
+		if self.doUpload:
+			self.upload()
+
 if __name__ == '__main__':
 	try:
 		Main().exec()
 	except subprocess.CalledProcessError as e:
 		print(f'Subcommand failed (exit code: {e.returncode}):', e.cmd, file=sys.stderr)
 		print('Output:', e.output, file=sys.stderr)
-		print('Error:', e.stderr.read(), file=sys.stderr)
+		print('Error:', e.stderr if type(e.stderr) == str else e.stderr.read(), file=sys.stderr)
 		sys.stderr.flush()
 		sys.exit(1)
