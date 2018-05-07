@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 
+import lib
+lib.Lib.check()
+
 import os.path
 import sys
 from git import Git
 from repostat import Stat
-
-depo_cwd = os.environ.get('DEPO_CWD')
-if depo_cwd and depo_cwd != os.getcwd():
-	sys.exit()
 
 s = Stat(False, False)
 
