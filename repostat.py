@@ -38,12 +38,14 @@ class Stat:
 		self.remote_local_revision = self.rrev if self.rrev.startswith('refs/') else 'refs/heads/' + self.rrev
 
 		if commits:
-			self.commits = [Commit(l) for l in self.git.run(['log', '--oneline'] \
+			args = ['log', '--oneline'] \
 					+ (['--no-merges'] if not merges else []) \
 					+ ['--format=%H %s']\
-					+ [remote_revision + '..HEAD'], \
-					color=False) \
-					.stdout.splitlines()]
+					+ [remote_revision + '..HEAD']
+
+			self.commits = [Commit(l) for l in self.git.run(args, color=False, encode=False) \
+					.stdout.replace(b'\r', b'').decode() \
+					.splitlines()]
 
 			self.filtered_revs = [c.hash for c in self.commits for f in Stat.filters if not f(c)]
 
