@@ -8,7 +8,6 @@ import sys
 import argparse
 
 import subprocess
-from git import Git
 import colorize
 from repostat import Stat
 

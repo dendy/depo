@@ -29,19 +29,14 @@ class Stat:
 		is_rrev_ref = self.rrev.startswith('refs/')
 		is_rrev_ref_heads = is_rrev_ref and self.rrev.startswith('refs/heads/')
 
-		if is_rrev_ref_heads:
-			remote_revision = self.rrev.replace('refs/heads/', self.remote + '/', 1)
-		elif is_rrev_ref:
-			remote_revision = self.rrev
-		else:
-			remote_revision = self.remote + '/' + self.rrev
-		self.remote_local_revision = self.rrev if self.rrev.startswith('refs/') else 'refs/heads/' + self.rrev
+		self.remote_revision = Git.remoteRevision(self.remote, self.rrev)
+		self.remote_local_revision = Git.remoteLocalRevision(self.rrev)
 
 		if commits:
 			args = ['log', '--oneline'] \
 					+ (['--no-merges'] if not merges else []) \
 					+ ['--format=%H %s']\
-					+ [remote_revision + '..HEAD']
+					+ [self.remote_revision + '..HEAD']
 
 			self.commits = [Commit(l) for l in self.git.run(args, color=False, encode=False) \
 					.stdout.replace(b'\r', b'').decode() \

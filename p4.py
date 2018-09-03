@@ -10,8 +10,10 @@ import enum
 import queue
 import threading
 
+from git import Git
 
-kDebugTasks = False
+
+kDebugTasks = True
 
 
 class Project:
@@ -23,6 +25,8 @@ class Project:
 		self.sync = 10
 		self.map = None
 		self.tree = tree
+		self.client = None
+		self.enabled = True
 
 		for token in tokens[1:]:
 			key, value = Project.__parseToken(token)
@@ -32,6 +36,10 @@ class Project:
 				self.sync = 0 if value == None else int(value)
 			elif key == 'm':
 				self.map = value
+			elif key == 'client':
+				self.client = value
+			elif key == '-':
+				self.enabled = False
 			else:
 				raise ValueError('Invalid token key:', key)
 
@@ -48,6 +56,8 @@ class Project:
 
 	def remotePath(self):
 		treePath = self.tree.remotePath()
+		if self.client:
+			return treePath
 		selfPath = self.name
 		return os.path.join(treePath, selfPath) if treePath else selfPath
 
@@ -68,6 +78,11 @@ class Tree:
 			for project in projects:
 				p = Project(project, self)
 				self.projectForName[p.name] = p
+
+		clients = tree.get('clients')
+		if clients:
+			for client in clients:
+				p = Project
 
 		trees = tree.get('trees')
 		if trees:
@@ -113,10 +128,11 @@ class Tree:
 
 
 class Task:
-	def __init__(self, config, project, tryCount):
+	def __init__(self, config, project, tryCount, error):
 		self.config = config
 		self.project = project
 		self.tryCount = tryCount
+		self.lastError = error
 
 		self.process = None
 
@@ -144,43 +160,46 @@ class Task:
 		return f'error (out={proc.stdout.read()}\n\n err={proc.stderr.read()}\n\n)'
 
 	def run(self):
-		self.gitDir = os.path.abspath(self.path + '.git')
+		self.git = Git(os.path.abspath(self.path + '.git'))
 		self.importedCount = 0
 
-		self.isCloning = not os.path.exists(self.gitDir)
+		self.isCloning = not os.path.exists(self.git.dir)
+		print(self.git.dir, 'cloning:', self.isCloning)
 
 		self.status = 'starting'
 
 		try:
 			if self.isCloning:
-				os.makedirs(self.gitDir)
+				os.makedirs(self.git.dir)
 
-				subprocess.run(['git', '-C', self.gitDir, 'init', '--bare'], check=True)
-				subprocess.run(['git', '-C', self.gitDir, 'config', 'git-p4.user', self.config['user']],
-						check=True)
-				subprocess.run(['git', '-C', self.gitDir, 'config', 'git-p4.port', self.config['port']],
-						check=True)
+				self.git.run(['init', '--bare'])
+				self.git.run(['config', 'git-p4.user', self.config['user']])
+				self.git.run(['config', 'git-p4.port', self.config['port']])
+
+				if self.project.client:
+					self.git.run(['config', 'git-p4.client', self.project.client])
 
 				depotPath = self.project.remotePath()
 
 				if not self.project.binary:
 					depotPath += '@all'
 
-				self.process = subprocess.Popen(['git', '-C', self.gitDir, 'p4', 'sync', depotPath],
+				clientArgs = ['--use-client-spec'] if self.project.client else []
+
+				self.dprint(f'doing p4 sync: clientArgs={clientArgs} depotPath={depotPath}')
+				self.process = subprocess.Popen(['git', '-C', self.git.dir, 'p4', 'sync'] + clientArgs + [depotPath],
 						stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 			else:
-				self.fetchBegin = subprocess.run(['git', '-C', self.gitDir, 'rev-parse',
-						'refs/remotes/p4/master'], check=True, stdout=subprocess.PIPE,
-						universal_newlines=True).stdout.strip()
+				self.fetchBegin = self.git.commitId('refs/remotes/p4/master')
 
-				self.process = subprocess.Popen(['git', '-C', self.gitDir, 'p4', 'sync'],
+				self.process = subprocess.Popen(['git', '-C', self.git.dir, 'p4', 'sync'],
 						stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 		except subprocess.CalledProcessError as e:
-			self.status = self.__collectErrorStatus(e)
+			self.lastError = self.__collectErrorStatus(e)
 			self.completed = True
 
-			if self.isCloning and os.path.exists(self.gitDir):
-				shutil.rmtree(self.gitDir)
+			if self.isCloning and os.path.exists(self.git.dir):
+				shutil.rmtree(self.git.dir)
 
 			return
 
@@ -195,31 +214,33 @@ class Task:
 		op = 'cloning' if self.isCloning else 'fetching'
 		if self.tryCount != 0:
 			op += f' (tries={self.tryCount})'
+		if self.lastError:
+			op += f' error={self.lastError}';
 		return op
 
 	def update(self):
 		try:
 			self.dprint('waiting for...', self.project.localPath())
-			self.process.wait(timeout=0.1)
+			self.process.wait(timeout=1)
 			self.dprint('waiting for...', self.project.localPath(), 'done', self.process.returncode)
 
 			if self.process.returncode != None:
 				if self.process.returncode != 0:
-					self.status = self.__collectErrorStatus(self.process)
+					self.lastError = self.__collectErrorStatus(self.process)
 					self.completed = True
 				else:
 					# move the master branch to p4/master
-					subprocess.run(['git', '-C', self.gitDir, 'branch', '-f', 'master',
-							'refs/remotes/p4/master'], check=True)
+					p4MasterCommitId = self.git.commitId('refs/remotes/p4/master')
+					with open(os.path.join(self.git.dir, 'refs/heads/master'), 'w') as f:
+						print(p4MasterCommitId, file=f)
 
 					self.status = self.operationName() + '... DONE'
 
 					if self.isCloning:
 						self.report = True
 					else:
-						fetchCount = len(subprocess.run(['git', '-C', self.gitDir, 'log',
-								'--oneline', self.fetchBegin + '..refs/remotes/p4/master'],
-								check=True, stdout=subprocess.PIPE, universal_newlines=True)
+						fetchCount = len(self.git.run(['log', '--oneline',
+								self.fetchBegin + '..refs/remotes/p4/master'])
 								.stdout.splitlines())
 
 						if fetchCount != 0:
@@ -285,7 +306,7 @@ class Main:
 				if not task.ok:
 					taskIndex = self.tasks.index(task)
 					self.tasks.remove(task)
-					task = Task(self.config, task.project, task.tryCount + 1)
+					task = Task(self.config, task.project, task.tryCount + 1, task.lastError)
 					task.run()
 					self.tasks.insert(taskIndex, task)
 				else:
@@ -299,7 +320,7 @@ class Main:
 			if not self.remainingProjects:
 				break
 
-			task = Task(self.config, self.remainingProjects.pop(), 0)
+			task = Task(self.config, self.remainingProjects.pop(), 0, None)
 
 			if self.args.projects and task.project.localPath() not in self.args.projects:
 				completedTasks.append(task)
@@ -379,22 +400,11 @@ class Main:
 			gitUrl = 'ssh://' + host + '/' + subdirPrefix + project.localPath()
 
 			# fetch changes from remote repository
-			def git(*args):
-				nonlocal project
-
-				gitDir = os.path.abspath(project.localPath() + '.git')
-
-				return subprocess.run(['git', '-C', gitDir, *args],
-					stdout=subprocess.PIPE,
-					stderr=subprocess.PIPE,
-					universal_newlines=True,
-					check=True
-				).stdout
-
-			localId = git('rev-parse', 'refs/remotes/p4/master').strip()
+			git = Git(os.path.abspath(project.localPath() + '.git'))
+			localId = git.commitId('refs/remotes/p4/master')
 
 			try:
-				remoteId = git('ls-remote', '--exit-code', gitUrl, branch).split(maxsplit=1)[0]
+				remoteId = git.run(['ls-remote', '--exit-code', gitUrl, branch]).stdout.split(maxsplit=1)[0]
 				if remoteId == localId:
 					# nothing to upload, skip
 					continue
@@ -402,11 +412,11 @@ class Main:
 				# no remote id, this is ok, create a new branch
 				pass
 
-			git('push', '-o', 'skip-validation', gitUrl, localId + ':' + branch)
+			git.run(['push', '-o', 'skip-validation', gitUrl, localId + ':' + branch])
 
 
 	def download(self):
-		self.remainingProjects = list(self.projectForPath.values())
+		self.remainingProjects = [p for p in list(self.projectForPath.values()) if p.enabled]
 		self.completedTasks = []
 		self.processedTaskCount = 0
 		self.totalTaskCount = len(self.args.projects) if self.args.projects else len(self.remainingProjects)
