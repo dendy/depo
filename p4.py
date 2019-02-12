@@ -157,7 +157,7 @@ class Task:
 			self.q.put(line)
 
 	def __collectErrorStatus(self, proc):
-		return f'error (out={proc.stdout.read()}\n\n err={proc.stderr.read()}\n\n)'
+		return f'error (out={proc.stdout}\n\n err={proc.stderr}\n\n)'
 
 	def run(self):
 		self.git = Git(os.path.abspath(self.path + '.git'))
