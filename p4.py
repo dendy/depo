@@ -147,7 +147,7 @@ class Task:
 
 	def dprint(self, *args):
 		if kDebugTasks:
-			print(*args)
+			print(self.path, *args)
 
 	def isCompleted(self):
 		return not self.process or self.process.returncode != None
@@ -196,6 +196,7 @@ class Task:
 						stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 		except subprocess.CalledProcessError as e:
 			self.lastError = self.__collectErrorStatus(e)
+			self.dprint('lastError:', self.lastError)
 			self.completed = True
 
 			if self.isCloning and os.path.exists(self.git.dir):
