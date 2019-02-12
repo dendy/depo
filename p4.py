@@ -274,6 +274,7 @@ class Main:
 		parser = argparse.ArgumentParser()
 		parser.add_argument('--download', required=False, action='store_true')
 		parser.add_argument('--upload', required=False, action='store_true')
+		parser.add_argument('-j', required=False, type=int, default=Main.kMaxTasks)
 		parser.add_argument('projects', nargs='*')
 		self.args = parser.parse_args()
 
@@ -317,7 +318,7 @@ class Main:
 			else:
 				needUpdate |= task.status != oldStatus
 
-		for i in range(len(self.tasks), Main.kMaxTasks):
+		for i in range(len(self.tasks), self.args.j):
 			if not self.remainingProjects:
 				break
 
