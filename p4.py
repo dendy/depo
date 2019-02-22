@@ -370,6 +370,7 @@ class Main:
 			config = json.loads(f.read())
 			host = config['host']
 			subdir = config['subdir']
+			fromdir = config['fromdir']
 			branch = config['branch']
 
 		def gexec(command, *args):
@@ -383,10 +384,14 @@ class Main:
 		allGerritProjects = gexec('ls-projects').splitlines()
 
 		subdirPrefix = '' if not subdir else subdir + '/'
+		fromDir = '.' if not fromdir else fromdir
 		uploadGerritProjects = [p[len(subdirPrefix):] for p in allGerritProjects if p.startswith(subdirPrefix)]
 
 		for project in list(self.projectForPath.values()):
 			path = project.localPath()
+
+			if path.startswith(fromDir + '/'):
+				path = path[len(fromDir) + 1:]
 
 			exists = path in uploadGerritProjects
 
