@@ -393,7 +393,7 @@ class Main:
 			print('was path:', path)
 			if path.startswith(fromDir + '/'):
 				path = path[len(fromDir) + 1:]
-				print('now path: path')
+				print('now path:', path)
 
 			exists = path in uploadGerritProjects
 
@@ -406,7 +406,7 @@ class Main:
 					subdirPrefix + path
 				)
 
-			gitUrl = 'ssh://' + host + '/' + subdirPrefix + project.localPath()
+			gitUrl = 'ssh://' + host + '/' + subdirPrefix + path
 
 			# fetch changes from remote repository
 			git = Git(os.path.abspath(project.localPath() + '.git'))
