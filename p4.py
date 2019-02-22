@@ -390,8 +390,10 @@ class Main:
 		for project in list(self.projectForPath.values()):
 			path = project.localPath()
 
+			print('was path:', path)
 			if path.startswith(fromDir + '/'):
 				path = path[len(fromDir) + 1:]
+				print('now path: path')
 
 			exists = path in uploadGerritProjects
 
