@@ -63,9 +63,7 @@ class Project:
 
 
 class Tree:
-	def __init__(self, root, name, parent):
-		tree = root['tree-' + name]
-
+	def __init__(self, tree, name, parent):
 		self.name = name
 		self.parent = parent
 		self.path = tree.get('path')
@@ -87,7 +85,7 @@ class Tree:
 		trees = tree.get('trees')
 		if trees:
 			for name in trees:
-				t = Tree(tree, name, self)
+				t = Tree(tree['tree-' + name], name, self)
 				self.treeForName[t.name] = t
 
 	def localPath(self):
