@@ -56,6 +56,7 @@ class Project:
 
 	def remotePath(self):
 		treePath = self.tree.remotePath()
+		print(f'treePath={treePath}')
 		if self.client:
 			return treePath
 		selfPath = self.name
@@ -96,6 +97,9 @@ class Tree:
 		return os.path.normpath(os.path.join(parentPath, selfPath) if parentPath else selfPath)
 
 	def remotePath(self):
+		print(f'tree self.parent={self.parent} self.path={self.path}')
+		if self.path and self.path.startswith('//'):
+			return self.path
 		if not self.parent:
 			return self.path
 		parentPath = self.parent.remotePath()
@@ -157,25 +161,41 @@ class Task:
 	def __collectErrorStatus(self, proc):
 		return f'error (out={proc.stdout}\n\n err={proc.stderr}\n\n)'
 
-	def run(self):
+	def run(self, dry):
 		self.git = Git(os.path.abspath(self.path + '.git'))
 		self.importedCount = 0
 
 		self.isCloning = not os.path.exists(self.git.dir)
-		print(self.git.dir, 'cloning:', self.isCloning)
+		#print(self.git.dir, 'cloning:', self.isCloning)
 
 		self.status = 'starting'
+
+		def git_run(args):
+			nonlocal dry
+			if dry:
+				print(f'would call: {" ".join(args)}')
+			else:
+				nonlocal self
+				self.git.run(args)
+
+		def git_popen(args):
+			nonlocal dry
+			if dry:
+				print(f'would call: {" ".join(args)}')
+			else:
+				nonlocal self
+				return subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 
 		try:
 			if self.isCloning:
 				os.makedirs(self.git.dir)
 
-				self.git.run(['init', '--bare'])
-				self.git.run(['config', 'git-p4.user', self.config['user']])
-				self.git.run(['config', 'git-p4.port', self.config['port']])
+				git_run(['init', '--bare'])
+				git_run(['config', 'git-p4.user', self.config['user']])
+				git_run(['config', 'git-p4.port', self.config['port']])
 
 				if self.project.client:
-					self.git.run(['config', 'git-p4.client', self.project.client])
+					git_run(['config', 'git-p4.client', self.project.client])
 
 				depotPath = self.project.remotePath()
 
@@ -185,13 +205,11 @@ class Task:
 				clientArgs = ['--use-client-spec'] if self.project.client else []
 
 				self.dprint(f'doing p4 sync: clientArgs={clientArgs} depotPath={depotPath}')
-				self.process = subprocess.Popen(['git', '-C', self.git.dir, 'p4', 'sync'] + clientArgs + [depotPath],
-						stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+				self.process = git_popen(['git', '-C', self.git.dir, 'p4', 'sync'] + clientArgs + [depotPath])
 			else:
 				self.fetchBegin = self.git.commitId('refs/remotes/p4/master')
 
-				self.process = subprocess.Popen(['git', '-C', self.git.dir, 'p4', 'sync'],
-						stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+				self.process = git_popen(['git', '-C', self.git.dir, 'p4', 'sync'])
 		except subprocess.CalledProcessError as e:
 			self.lastError = self.__collectErrorStatus(e)
 			self.dprint('lastError:', self.lastError)
@@ -202,12 +220,16 @@ class Task:
 
 			return
 
-		self.q = queue.Queue()
-		self.thread = threading.Thread(target=Task.__thread, args=(self,))
-		self.thread.daemon = True
-		self.thread.start()
+		if dry:
+			self.completed = True
+			self.ok = True
+		else:
+			self.q = queue.Queue()
+			self.thread = threading.Thread(target=Task.__thread, args=(self,))
+			self.thread.daemon = True
+			self.thread.start()
 
-		self.status = self.operationName() + '...'
+			self.status = self.operationName() + '...'
 
 	def operationName(self):
 		op = 'cloning' if self.isCloning else 'fetching'
@@ -218,6 +240,8 @@ class Task:
 		return op
 
 	def update(self):
+		if self.process == None: return
+
 		try:
 			self.dprint('waiting for...', self.project.localPath())
 			self.process.wait(timeout=1)
@@ -273,6 +297,7 @@ class Main:
 		parser.add_argument('--download', required=False, action='store_true')
 		parser.add_argument('--upload', required=False, action='store_true')
 		parser.add_argument('-j', required=False, type=int, default=Main.kMaxTasks)
+		parser.add_argument('-n', required=False, action='store_true')
 		parser.add_argument('projects', nargs='*')
 		self.args = parser.parse_args()
 
@@ -307,7 +332,7 @@ class Main:
 					taskIndex = self.tasks.index(task)
 					self.tasks.remove(task)
 					task = Task(self.config, task.project, task.tryCount + 1, task.lastError)
-					task.run()
+					task.run(self.args.n)
 					self.tasks.insert(taskIndex, task)
 				else:
 					self.tasks.remove(task)
@@ -326,7 +351,7 @@ class Main:
 				completedTasks.append(task)
 			else:
 				self.tasks.append(task)
-				task.run()
+				task.run(self.args.n)
 
 			needUpdate = True
 
@@ -363,13 +388,21 @@ class Main:
 			self.printTask(task)
 			self.visibleTasks.append(task)
 
-	def upload(self):
+	def upload(self, dry):
 		with open('p4-upload.json', 'r') as f:
 			config = json.loads(f.read())
 			host = config['host']
-			subdir = config['subdir']
-			fromdir = config['fromdir']
-			branch = config['branch']
+
+			def get_source(s):
+				class Source:
+					pass
+				source = Source()
+				source.fromdir = s['from']
+				source.todir = s['to']
+				source.branch = s['branch']
+				return source
+
+			sources = [get_source(s) for s in config['sources']]
 
 		def gexec(command, *args):
 			nonlocal host
@@ -380,32 +413,50 @@ class Main:
 
 		# get list of all projects
 		allGerritProjects = gexec('ls-projects').splitlines()
-
-		subdirPrefix = '' if not subdir else subdir + '/'
-		fromDir = '.' if not fromdir else fromdir
-		uploadGerritProjects = [p[len(subdirPrefix):] for p in allGerritProjects if p.startswith(subdirPrefix)]
+		print('all gerrit projects:', allGerritProjects)
 
 		for project in list(self.projectForPath.values()):
 			path = project.localPath()
 
-			if path.startswith(fromDir + '/'):
-				path = path[len(fromDir) + 1:]
+			def find_source():
+				nonlocal sources, path
 
-			exists = path in uploadGerritProjects
+				for source in sources:
+					if path == source.fromdir:
+						todir = source.todir
+					elif path.startswith(source.fromdir + '/'):
+						todir = source.todir + '/' + path[len(source.fromdir) + 1:]
+					else:
+						todir = None
 
-			print('project:', project.localPath(), exists)
+					if todir != None:
+						return todir, source.branch
+				else:
+					raise LookupError()
+
+			try:
+				todir, branch = find_source()
+			except LookupError:
+				print(f'Project not exported: {path}')
+				continue
+
+			exists = todir in allGerritProjects
+
+			print(f'project: from={path} to={todir} exists={exists}')
+
+			if dry: continue
 
 			# create project on gerrit if it is not exist
 			if not exists:
 				gexec('create-project',
 					'--parent', 'roku-settings',
-					subdirPrefix + path
+					todir
 				)
 
-			gitUrl = 'ssh://' + host + '/' + subdirPrefix + path
+			gitUrl = 'ssh://' + host + '/' + todir
 
 			# fetch changes from remote repository
-			git = Git(os.path.abspath(project.localPath() + '.git'))
+			git = Git(os.path.abspath(path + '.git'))
 			localId = git.commitId('refs/remotes/p4/master')
 
 			try:
@@ -443,7 +494,7 @@ class Main:
 		if self.doDownload:
 			self.download()
 		if self.doUpload:
-			self.upload()
+			self.upload(self.args.n)
 
 if __name__ == '__main__':
 	try:
