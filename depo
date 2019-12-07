@@ -53,11 +53,25 @@ class Main:
 				self.lib.excludeProjects([p.localPath() for p in projectForName.values() if p.sync > sync])
 
 		if sys.platform == 'win32':
-			repo = [shutil.which('repo')]
 			python_executable = 'python3'
+
+			def find_repo_executable():
+				exe = shutil.which('repo')
+				if exe: return exe
+
+				paths = os.environ.get('PATH').split(';')
+				for path in paths:
+					exe = os.path.join(path, 'repo')
+					if os.path.isfile(exe): return exe
+
+			repo_executable = find_repo_executable()
+			if not repo_executable:
+				raise RuntimeError('repo not found')
+
+			repo = ['python2', repo_executable]
 		else:
-			repo = ['repo']
 			python_executable = sys.executable
+			repo = ['repo']
 
 		subprocess.run(repo + ['forall', '-c', python_executable, script] + self.args.argv, check=True)
 
