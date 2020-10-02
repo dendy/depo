@@ -68,7 +68,7 @@ class Main:
 			if not repo_executable:
 				raise RuntimeError('repo not found')
 
-			repo = ['python2', repo_executable]
+			repo = ['python3', repo_executable]
 		else:
 			python_executable = sys.executable
 			repo = ['repo']
