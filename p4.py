@@ -159,7 +159,7 @@ class Task:
 			self.q.put(line)
 
 	def __collectErrorStatus(self, proc):
-		return f'error (out={proc.stdout}\n\n err={proc.stderr}\n\n)'
+		return f'error (out={proc.stdout.read()}\n\n err={proc.stderr.read()}\n\n)'
 
 	def run(self, dry):
 		self.git = Git(os.path.abspath(self.path + '.git'))
@@ -207,6 +207,9 @@ class Task:
 				self.dprint(f'doing p4 sync: clientArgs={clientArgs} depotPath={depotPath}')
 				self.process = git_popen(['git', '-C', self.git.dir, 'p4', 'sync'] + clientArgs + [depotPath])
 			else:
+				git_run(['config', 'git-p4.user', self.config['user']])
+				git_run(['config', 'git-p4.port', self.config['port']])
+
 				self.fetchBegin = self.git.commitId('refs/remotes/p4/master')
 
 				self.process = git_popen(['git', '-C', self.git.dir, 'p4', 'sync'])
@@ -350,6 +353,7 @@ class Main:
 			if self.args.projects and task.project.localPath() not in self.args.projects:
 				completedTasks.append(task)
 			else:
+				print("task:", task.path)
 				self.tasks.append(task)
 				task.run(self.args.n)
 
