@@ -69,6 +69,9 @@ class Main:
 				raise RuntimeError('repo not found')
 
 			repo = ['python3', repo_executable]
+		elif sys.platform == 'darwin':
+			python_executable = 'python3'
+			repo = ['repo']
 		else:
 			python_executable = sys.executable
 			repo = ['repo']
