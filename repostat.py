@@ -29,8 +29,8 @@ class Stat:
 		is_rrev_ref = self.rrev.startswith('refs/')
 		is_rrev_ref_heads = is_rrev_ref and self.rrev.startswith('refs/heads/')
 
-		self.remote_revision = Git.remoteRevision(self.remote, self.rrev)
-		self.remote_local_revision = Git.remoteLocalRevision(self.rrev)
+		self.remote_revision = self.git.valid_remote_revision(self.remote, self.rrev)
+		self.remote_local_revision = self.git.remote_local_revision(self.rrev)
 
 		if commits:
 			args = ['log', '--oneline'] \

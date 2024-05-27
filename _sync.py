@@ -76,7 +76,7 @@ if args.prepare:
 		print(colorize.c('Prepared branch outdated', color=colorize.RED), file=sys.stderr)
 		sys.exit(1)
 
-	target_rev = Git.remoteRevision(s.remote, branch)
+	target_rev = s.git.optional_remote_revision(s.remote, branch)
 	target_rev_exists = s.git.exists(target_rev)
 
 	if target_rev_exists:
