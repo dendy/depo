@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os.path
+import datetime
 import sys
 import subprocess
 import shutil
@@ -21,11 +22,11 @@ class Main:
 		parser = argparse.ArgumentParser()
 		parser.add_argument('command')
 		parser.add_argument('--sync', default=0)
+		parser.add_argument('--debug')
 		parser.add_argument('argv', nargs='*')
 		self.args = parser.parse_args()
 
 	def exec(self):
-
 		if self.args.command == 'help':
 			isHelp = True
 			command = self.args.argv[0]
@@ -76,7 +77,15 @@ class Main:
 			python_executable = sys.executable
 			repo = ['repo']
 
-		subprocess.run(repo + ['forall', '-c', python_executable, script] + self.args.argv, check=True)
+		if self.args.debug:
+			timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+			debug_dir = os.path.realpath(self.args.debug)
+			output_dir = f'{debug_dir}/{timestamp}'
+
+			subprocess.run(repo + ['forall', '-c', python_executable, f'{scripts_dir}/debug-launcher.py',
+					f'--command={command}', f'--output={output_dir}', python_executable, script] + self.args.argv, check=True)
+		else:
+			subprocess.run(repo + ['forall', '-c', python_executable, script] + self.args.argv, check=True)
 
 
 if __name__ == '__main__':
