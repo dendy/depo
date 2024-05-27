@@ -23,13 +23,12 @@ class Main:
 		parser.add_argument('command')
 		parser.add_argument('--sync', default=0)
 		parser.add_argument('--debug')
-		parser.add_argument('argv', nargs='*')
-		self.args = parser.parse_args()
+		self.args, self.argv = parser.parse_known_args()
 
 	def exec(self):
 		if self.args.command == 'help':
 			isHelp = True
-			command = self.args.argv[0]
+			command = self.argv[0]
 		else:
 			isHelp = False
 			command = self.args.command
@@ -40,8 +39,8 @@ class Main:
 			subprocess.run([sys.executable, script, '-h'], check=True)
 			sys.exit(0)
 
-		if self.args.argv and self.args.argv[len(self.args.argv) - 1] == '.':
-			self.args.argv = self.args.argv[:-1]
+		if self.argv and self.argv[len(self.argv) - 1] == '.':
+			self.argv = self.argv[:-1]
 			self.lib.includeProjects([self.lib.projectName])
 		else:
 			manifestsDir = os.path.join(self.lib.rootDir, '.repo/manifests')
@@ -83,9 +82,9 @@ class Main:
 			output_dir = f'{debug_dir}/{timestamp}'
 
 			subprocess.run(repo + ['forall', '-c', python_executable, f'{scripts_dir}/debug-launcher.py',
-					f'--command={command}', f'--output={output_dir}', python_executable, script] + self.args.argv, check=True)
+					f'--command={command}', f'--output={output_dir}', python_executable, script] + self.argv, check=True)
 		else:
-			subprocess.run(repo + ['forall', '-c', python_executable, script] + self.args.argv, check=True)
+			subprocess.run(repo + ['forall', '-c', python_executable, script] + self.argv, check=True)
 
 
 if __name__ == '__main__':
