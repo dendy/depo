@@ -33,20 +33,30 @@ class Stat:
 		self.remote_local_revision = self.git.remote_local_revision(self.rrev)
 
 		if commits:
-			args = ['log', '--oneline'] \
-					+ (['--no-merges'] if not merges else []) \
-					+ ['--format=%H %s']\
-					+ [self.remote_revision + '..HEAD']
+			self.no_remote_revision = False
+			self.commits = None
 
-			self.commits = [Commit(l) for l in self.git.run(args, color=False, encode=False) \
-					.stdout.replace(b'\r', b'').decode() \
-					.splitlines()]
+			if self.remote_revision is None:
+				# revision from manifest does not exist in local git repo
+				self.no_remote_revision = True
+			else:
+				args = ['log', '--oneline'] \
+						+ (['--no-merges'] if not merges else []) \
+						+ ['--format=%H %s']\
+						+ [self.remote_revision + '..HEAD']
 
-			self.filtered_revs = [c.hash for c in self.commits for f in Stat.filters if not f(c)]
+				self.commits = [Commit(l) for l in self.git.run(args, color=False, encode=False) \
+						.stdout.replace(b'\r', b'').decode() \
+						.splitlines()]
+
+			if self.commits is None:
+				self.filtered_revs = None
+			else:
+				self.filtered_revs = [c.hash for c in self.commits for f in Stat.filters if not f(c)]
 
 			self.dirty_files = self.git.run(['status', '-s'], color=True).stdout.splitlines()
 
-			self.has_info = self.commits or self.dirty_files or self.filtered_revs
+			self.has_info = self.no_remote_revision or self.commits or self.dirty_files or self.filtered_revs
 
 			if self.has_info:
 				# resolve branch name and tracking flag

@@ -23,6 +23,8 @@ def main():
 		sys.exit()
 
 	tags = []
+	if s.no_remote_revision:
+		tags.append('MISSING_RREV')
 	if s.dirty_files:
 		tags.append('DIRTY')
 	if not s.branch_name:
@@ -39,18 +41,23 @@ def main():
 		print(' ' + ' '.join(colorize.c('[{}]'.format(tag), color=colorize.RED, bright=True) for tag in tags), end='')
 	print()
 
-	if s.dirty_files:
-		print('\n'.join(s.dirty_files))
+	if s.no_remote_revision:
+		print(f'ERROR: Missing manifest revision: rmeote: {s.remote} revision: {s.rrev}')
 
-	for c in s.commits:
-		if not Stat.do_not_merge_filter(c):
-			if not args.d:
-				continue
-			subject = colorize.c(Stat.DO_NOT_MERGE_PREFIX, color=colorize.RED, bright=True) \
-				+ c.subject[len(Stat.DO_NOT_MERGE_PREFIX):]
-		else:
-			subject = c.subject
-		print('{} {}'.format(colorize.c(c.hash[:7], color=colorize.YELLOW), subject))
+	if s.dirty_files:
+		for dirty_file in s.dirty_files:
+			print(dirty_file)
+
+	if not s.commits is None:
+		for c in s.commits:
+			if not Stat.do_not_merge_filter(c):
+				if not args.d:
+					continue
+				subject = colorize.c(Stat.DO_NOT_MERGE_PREFIX, color=colorize.RED, bright=True) \
+					+ c.subject[len(Stat.DO_NOT_MERGE_PREFIX):]
+			else:
+				subject = c.subject
+			print('{} {}'.format(colorize.c(c.hash[:7], color=colorize.YELLOW), subject))
 
 	print()
 
