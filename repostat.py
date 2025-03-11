@@ -32,18 +32,32 @@ class Stat:
 		self.remote_revision = self.git.valid_remote_revision(self.remote, self.rrev)
 		self.remote_local_revision = self.git.remote_local_revision(self.rrev)
 
+		self.branch_name = self.git.get('rev-parse', '--abbrev-ref=loose', 'HEAD')
+
 		if commits:
+			try:
+				branch_remote = self.git.get('config', f'branch.{self.branch_name}.remote')
+			except subprocess.CalledProcessError:
+				branch_remote = None
+
+			try:
+				branch_merge = self.git.get('config', f'branch.{self.branch_name}.merge')
+				branch_remote_revision = self.git.valid_remote_revision(branch_remote, branch_merge)
+			except subprocess.CalledProcessError:
+				branch_merge = None
+
 			self.no_remote_revision = False
 			self.commits = None
 
 			if self.remote_revision is None:
 				# revision from manifest does not exist in local git repo
 				self.no_remote_revision = True
-			else:
+
+			if not branch_remote is None and not branch_merge is None:
 				args = ['log', '--oneline'] \
 						+ (['--no-merges'] if not merges else []) \
 						+ ['--format=%H %s']\
-						+ [self.remote_revision + '..HEAD']
+						+ [f'{branch_remote_revision}..HEAD']
 
 				self.commits = [Commit(l) for l in self.git.run(args, color=False, encode=False) \
 						.stdout.replace(b'\r', b'').decode() \
@@ -60,12 +74,5 @@ class Stat:
 
 			if self.has_info:
 				# resolve branch name and tracking flag
-				if self.git.run(['rev-parse', '--symbolic-full-name', 'HEAD']).stdout.strip() != 'HEAD':
-					self.branch_name = self.git.run(['rev-parse', '--abbrev-ref=loose', 'HEAD']).stdout.strip()
-
-					try:
-						branch_remote = self.git.run(['config', 'branch.' + self.branch_name + '.remote']).stdout.strip()
-						branch_merge = self.git.run(['config', 'branch.' + self.branch_name + '.merge']).stdout.strip()
-						self.is_tracking = branch_remote == self.remote and branch_merge == self.remote_local_revision
-					except subprocess.CalledProcessError:
-						pass
+				if self.git.get('rev-parse', '--symbolic-full-name', 'HEAD') != 'HEAD':
+					self.is_tracking = branch_remote == self.remote and branch_merge == self.remote_local_revision
