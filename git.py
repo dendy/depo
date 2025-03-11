@@ -18,6 +18,9 @@ class Git:
 				stderr=subprocess.PIPE, universal_newlines=encode,
 				check=check)
 
+	def get(self, *args):
+		return self.run(list(args)).stdout.strip()
+
 	def mergeBase(self, a, b):
 		return self.run(['merge-base', a, b]).stdout.strip()
 
