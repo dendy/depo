@@ -70,9 +70,10 @@ class Stat:
 
 			self.dirty_files = self.git.run(['status', '-s'], color=True).stdout.splitlines()
 
-			self.has_info = self.no_remote_revision or self.commits or self.dirty_files or self.filtered_revs
+			# resolve branch name and tracking flag
+			if self.git.get('rev-parse', '--symbolic-full-name', 'HEAD') != 'HEAD':
+				self.is_tracking = branch_remote == self.remote and branch_merge == self.remote_local_revision
+			else:
+				self.is_tracking = True
 
-			if self.has_info:
-				# resolve branch name and tracking flag
-				if self.git.get('rev-parse', '--symbolic-full-name', 'HEAD') != 'HEAD':
-					self.is_tracking = branch_remote == self.remote and branch_merge == self.remote_local_revision
+			self.has_info = self.no_remote_revision or self.commits or self.dirty_files or self.filtered_revs or not self.is_tracking
