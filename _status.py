@@ -42,7 +42,7 @@ def main():
 	print()
 
 	if s.no_remote_revision:
-		print(f'ERROR: Missing manifest revision: rmeote: {s.remote} revision: {s.rrev}')
+		print(f'ERROR: Missing manifest revision: remote: {s.remote} revision: {s.rrev}')
 
 	if s.dirty_files:
 		for dirty_file in s.dirty_files:
